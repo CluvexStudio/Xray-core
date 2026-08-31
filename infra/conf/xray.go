@@ -362,9 +362,18 @@ func (c *OutboundDetourConfig) Build() (*core.OutboundHandlerConfig, error) {
 	if err != nil {
 		return nil, errors.New("failed to build outbound handler for protocol ", c.Protocol).Base(err)
 	}
-	if err := validateOutboundTransportSecurity(rawConfig, senderSettings); err != nil {
-		return nil, err
-	}
+	// Upstream reverted this check in XTLS/Xray-core@f8d54a0 ("Allow
+	// unencrypted outbounds on public Internet for VLESS and Trojan"),
+	// which shipped between v26.7.28 and v26.8.28. It broke legitimate
+	// setups — chained servers behind a firewall, custom obfuscation
+	// transports, and other cases where TLS is deliberately handled
+	// elsewhere — with a hard build failure instead of a warning. Matching
+	// that revert here rather than deleting validateOutboundTransportSecurity
+	// keeps the check available (and trivial to re-enable) if a future
+	// upstream release brings it back in a less disruptive form.
+	//if err := validateOutboundTransportSecurity(rawConfig, senderSettings); err != nil {
+	//	return nil, err
+	//}
 
 	return &core.OutboundHandlerConfig{
 		SenderSettings: serial.ToTypedMessage(senderSettings),

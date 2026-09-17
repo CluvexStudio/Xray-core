@@ -1,0 +1,26 @@
+syntax = "proto3";
+
+package xray.proxy.singbox;
+option csharp_namespace = "Xray.Proxy.Singbox";
+option go_package = "github.com/xtls/xray-core/proxy/singbox";
+option java_package = "com.xray.proxy.singbox";
+option java_multiple_files = true;
+
+// Config of the "singbox" outbound: traffic routed to it is carried by a sing-box outbound or
+// endpoint, so every protocol sing-box speaks is usable from an Xray config — behind Xray's routing,
+// DNS, balancers and chains.
+message Config {
+  // A sing-box configuration fragment, as JSON: the `outbounds` and `endpoints` to run, and any
+  // box-wide options they rely on (`dns`, `ntp`, `certificate`, `route.default_domain_resolver`…).
+  // Inbounds are not allowed: this box only ever dials out.
+  string config = 1;
+
+  // Tag of the outbound or endpoint that carries the traffic. Empty means the first endpoint, or the
+  // first outbound when there are no endpoints.
+  string use = 2;
+
+  // Sends sing-box's own connections to its servers through this Xray outbound's dialer — its
+  // sockopt and `dialerProxy` chain — instead of letting sing-box dial them. Only outbounds and
+  // endpoints without a `detour` of their own are rerouted.
+  bool via_xray = 3;
+}

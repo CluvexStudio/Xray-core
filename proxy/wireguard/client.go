@@ -10,7 +10,7 @@ import (
 	"sync"
 	"time"
 
-	"golang.zx2c4.com/wireguard/tun"
+	"github.com/amnezia-vpn/amneziawg-go/v3/tun"
 
 	"github.com/xtls/xray-core/common"
 	"github.com/xtls/xray-core/common/buf"
@@ -28,7 +28,7 @@ import (
 	"github.com/xtls/xray-core/features/stats"
 	"github.com/xtls/xray-core/transport"
 	"github.com/xtls/xray-core/transport/internet"
-	"golang.zx2c4.com/wireguard/device"
+	"github.com/amnezia-vpn/amneziawg-go/v3/device"
 )
 
 type entry struct {
@@ -345,6 +345,12 @@ func (h *Handler) init(ctx context.Context) error {
 	bind.reserved = h.conf.Reserved
 	var cfg strings.Builder
 	cfg.WriteString("private_key=" + h.conf.SecretKey + "\n")
+	// AmneziaWG obfuscation parameters are device-level, so they must be written before the first
+	// "public_key=" line, which is what moves the UAPI parser into a peer section. Unset parameters
+	// produce no lines, so a plain WireGuard peer sends exactly the same UAPI string as before.
+	for _, line := range h.conf.Awg.UAPILines() {
+		cfg.WriteString(line + "\n")
+	}
 	for _, peer := range h.conf.Peers {
 		cfg.WriteString("public_key=" + peer.PublicKey + "\n")
 		if peer.PreSharedKey != "" {

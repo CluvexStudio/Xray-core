@@ -2,6 +2,7 @@ package singbridge
 
 import (
 	"context"
+	"sync"
 	"time"
 
 	B "github.com/sagernet/sing/common/buf"
@@ -33,8 +34,13 @@ type PacketConnWrapper struct {
 	buf.Reader
 	buf.Writer
 	net.Conn
-	Dest   net.Destination
+	Dest net.Destination
+
+	// cached holds the datagrams of a multi-buffer read that did not fit in one ReadPacket. Close
+	// runs on the copy's other goroutine while a read is in flight, so both go through mu.
+	mu     sync.Mutex
 	cached buf.MultiBuffer
+	closed bool
 
 	// A simple patch to avoid goroutine leak since sing infra cannot awake read block by write err
 	T *signal.ActivityTimer
@@ -48,39 +54,56 @@ func (w *PacketConnWrapper) ReadPacket(buffer *B.Buffer) (addr M.Socksaddr, err 
 			w.T.SetTimeout(2 * time.Second)
 		}
 	}()
-	if w.cached != nil {
-		mb, bb := buf.SplitFirst(w.cached)
-		if bb == nil {
-			w.cached = nil
-		} else {
-			buffer.Write(bb.Bytes())
-			w.cached = mb
-			var destination net.Destination
-			if bb.UDP != nil {
-				destination = *bb.UDP
-			} else {
-				destination = w.Dest
-			}
-			bb.Release()
-			return ToSocksaddr(destination), nil
-		}
+	if destination, ok := w.takeCached(buffer); ok {
+		return destination, nil
 	}
 	mb, err := w.ReadMultiBuffer()
 	nb, bb := buf.SplitFirst(mb)
 	if bb == nil {
-		return M.Socksaddr{}, nil
-	} else {
-		buffer.Write(bb.Bytes())
-		w.cached = nb
-		var destination net.Destination
-		if bb.UDP != nil {
-			destination = *bb.UDP
-		} else {
-			destination = w.Dest
+		// A failed read with nothing in it used to come back as an empty packet and no error,
+		// which left the copy loop spinning on a closed link.
+		if err != nil {
+			return M.Socksaddr{}, err
 		}
-		bb.Release()
-		return ToSocksaddr(destination), nil
+		return M.Socksaddr{}, nil
 	}
+	buffer.Write(bb.Bytes())
+	destination := w.Dest
+	if bb.UDP != nil {
+		destination = *bb.UDP
+	}
+	bb.Release()
+	w.mu.Lock()
+	if w.closed {
+		w.mu.Unlock()
+		buf.ReleaseMulti(nb)
+	} else {
+		w.cached = nb
+		w.mu.Unlock()
+	}
+	return ToSocksaddr(destination), nil
+}
+
+// takeCached moves the next cached datagram into buffer.
+func (w *PacketConnWrapper) takeCached(buffer *B.Buffer) (M.Socksaddr, bool) {
+	w.mu.Lock()
+	defer w.mu.Unlock()
+	if w.cached == nil {
+		return M.Socksaddr{}, false
+	}
+	mb, bb := buf.SplitFirst(w.cached)
+	if bb == nil {
+		w.cached = nil
+		return M.Socksaddr{}, false
+	}
+	buffer.Write(bb.Bytes())
+	w.cached = mb
+	destination := w.Dest
+	if bb.UDP != nil {
+		destination = *bb.UDP
+	}
+	bb.Release()
+	return ToSocksaddr(destination), true
 }
 
 func (w *PacketConnWrapper) WritePacket(buffer *B.Buffer, destination M.Socksaddr) (err error) {
@@ -102,6 +125,11 @@ func (w *PacketConnWrapper) WritePacket(buffer *B.Buffer, destination M.Socksadd
 }
 
 func (w *PacketConnWrapper) Close() error {
-	buf.ReleaseMulti(w.cached)
+	w.mu.Lock()
+	cached := w.cached
+	w.cached = nil
+	w.closed = true
+	w.mu.Unlock()
+	buf.ReleaseMulti(cached)
 	return nil
 }

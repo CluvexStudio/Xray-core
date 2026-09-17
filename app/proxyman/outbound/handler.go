@@ -264,6 +264,44 @@ out:
 	common.Interrupt(link.Reader)
 }
 
+// ProcessLink runs one connection through this handler's proxy without taking ownership of the
+// link: on return the link is neither closed nor interrupted, and the error is handed back instead
+// of being logged. It is what lets the autoselect group (proxy/autoselect) move a client connection
+// to another member after this one failed.
+//
+// Target resolution and the UDP endpoint override are applied as in Dispatch. Mux and XUDP are
+// deliberately bypassed: their dispatch is asynchronous, so a failure could never be handed back,
+// and a group member has no use for them anyway.
+func (h *Handler) ProcessLink(ctx context.Context, link *transport.Link) error {
+	outbounds := session.OutboundsFromContext(ctx)
+	ob := outbounds[len(outbounds)-1]
+	content := session.ContentFromContext(ctx)
+	if h.senderSettings != nil && h.senderSettings.TargetStrategy.HasStrategy() && ob.Target.Address.Family().IsDomain() && (content == nil || !content.SkipDNSResolve) {
+		strategy := h.senderSettings.TargetStrategy
+		if ob.Target.Network == net.Network_UDP && ob.OriginalTarget.Address != nil {
+			strategy = strategy.GetDynamicStrategy(ob.OriginalTarget.Address.Family())
+		}
+		ips, err := internet.LookupForIP(ob.Target.Address.Domain(), strategy, nil)
+		if err != nil {
+			if h.senderSettings.TargetStrategy.ForceIP() {
+				return errors.New("failed to resolve ip for target ", ob.Target.Address.Domain()).Base(err)
+			}
+			errors.LogInfoInner(ctx, err, "failed to resolve ip for target ", ob.Target.Address.Domain())
+		} else {
+			unchangedDomain := ob.Target.Address.Domain()
+			ob.Target.Address = net.IPAddress(ips[dice.Roll(len(ips))])
+			errors.LogInfo(ctx, "target: ", unchangedDomain, " resolved to: ", ob.Target.Address.String())
+		}
+	}
+	if ob.Target.Network == net.Network_UDP && ob.OriginalTarget.Address != nil && ob.OriginalTarget.Address != ob.Target.Address {
+		link = &transport.Link{
+			Reader: &buf.EndpointOverrideReader{Reader: link.Reader, Dest: ob.Target.Address, OriginalDest: ob.OriginalTarget.Address},
+			Writer: &buf.EndpointOverrideWriter{Writer: link.Writer, Dest: ob.Target.Address, OriginalDest: ob.OriginalTarget.Address},
+		}
+	}
+	return h.proxy.Process(ctx, link, h)
+}
+
 func (h *Handler) DestIpAddress() net.IP {
 	return internet.DestIpAddress()
 }

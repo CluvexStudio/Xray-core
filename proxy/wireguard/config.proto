@@ -16,6 +16,38 @@ message PeerConfig {
   repeated string allowed_ips = 5;
 }
 
+// AmneziaWG (awg) obfuscation parameters. Every value is carried as a string and passed through to
+// the device's UAPI verbatim: the magic headers (h1-h4) and the timing keys are UintRange values
+// ("5" or "5-10"), i1-i5 are obfuscation chains, and an empty string unambiguously means "unset" —
+// which a proto3 uint32 could not express, since jc=0 is itself a meaningful value.
+message AwgConfig {
+  string jc = 1;
+  string jmin = 2;
+  string jmax = 3;
+  string s1 = 4;
+  string s2 = 5;
+  string s3 = 6;
+  string s4 = 7;
+  string h1 = 8;
+  string h2 = 9;
+  string h3 = 10;
+  string h4 = 11;
+  string i1 = 12;
+  string i2 = 13;
+  string i3 = 14;
+  string i4 = 15;
+  string i5 = 16;
+  string header_protection_key = 17;
+  string content_padding_addition = 18;
+  string rekey_after_time = 19;
+  string rekey_timeout = 20;
+  string reject_after_time = 21;
+  string keepalive_timeout = 22;
+  string max_handshake_attempts = 23;
+  string random_trailers = 24;
+  string disable_cookies = 25;
+}
+
 message DeviceConfig {
   enum DomainStrategy {
     FORCE_IP = 0;
@@ -35,4 +67,6 @@ message DeviceConfig {
   bool is_client = 8;
   bool no_kernel_tun = 9;
   repeated string DNS = 10;
+
+  AwgConfig awg = 11;
 }

@@ -19,6 +19,7 @@ import (
 	"github.com/xtls/xray-core/features/extension"
 	"github.com/xtls/xray-core/features/outbound"
 	feature_stats "github.com/xtls/xray-core/features/stats"
+	"github.com/xtls/xray-core/proxy/autoselect"
 )
 
 type MetricsHandler struct {
@@ -155,6 +156,7 @@ func (p *MetricsHandler) handleDebugVars(w http.ResponseWriter, r *http.Request)
 	})
 	vars["stats"] = marshalJSON(p.stats())
 	vars["observatory"] = marshalJSON(p.observatoryStatus())
+	vars["autoselect"] = marshalJSON(autoselect.Statuses())
 
 	payload, err := json.Marshal(vars)
 	if err != nil {

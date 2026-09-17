@@ -1,0 +1,57 @@
+syntax = "proto3";
+
+package xray.proxy.autoselect;
+option csharp_namespace = "Xray.Proxy.Autoselect";
+option go_package = "github.com/xtls/xray-core/proxy/autoselect";
+option java_package = "com.xray.proxy.autoselect";
+option java_multiple_files = true;
+
+// Config of the "autoselect" outbound: a group that forwards every connection through the
+// healthiest of its member outbounds, fails over without the client noticing, and keeps probing
+// the members so it knows where to go next.
+//
+// Durations are milliseconds. Every zero value means "use the built-in default", which is why the
+// switches are phrased as disable_* — a proto3 bool cannot tell "unset" from "false".
+message Config {
+  // Member outbound tags, in the caller's order of preference. Ties in health are broken by it.
+  repeated string outbounds = 1;
+  // Tag prefixes resolved against the outbound manager at runtime, appended after `outbounds`.
+  repeated string selector = 2;
+
+  string probe_url = 3;
+  // Tried once when a probe of probe_url fails, so a member whose own routing blocks the probe
+  // host is not declared dead.
+  string fallback_probe_url = 4;
+  int64 probe_timeout_ms = 5;
+
+  // How often the selected member is probed while traffic flows. Skipped whenever real traffic
+  // through it succeeded within the same interval.
+  int64 active_interval_ms = 6;
+  // How often the best alternatives (the failover targets) are probed.
+  int64 standby_interval_ms = 7;
+  int32 standby_count = 8;
+  // How often every other member is probed.
+  int64 sweep_interval_ms = 9;
+  // No connection for this long pauses probing until traffic resumes.
+  int64 idle_after_ms = 10;
+
+  // A healthy selection is only replaced by a member that is at least this much faster
+  // (0.3 = 30%) AND by at least switch_min_gain_ms, and only after min_dwell_ms on the current one.
+  float switch_ratio = 11;
+  int64 switch_min_gain_ms = 12;
+  int64 min_dwell_ms = 13;
+
+  // Transparent retry of a failed connection on the next member.
+  bool disable_retry = 14;
+  int32 max_attempts = 15;
+  // Upper bound of client data kept for replaying a connection onto another member.
+  int32 max_replay_bytes = 16;
+  // First response budget of an attempt; 0 derives it from the member's measured delay.
+  int64 attempt_budget_ms = 17;
+
+  // Member to start on before any probe has answered (the caller's cached best).
+  string initial = 18;
+  // Leave connections that stopped receiving data on a member that was found dead alone.
+  bool disable_interrupt_stalled = 19;
+  int32 concurrency = 20;
+}

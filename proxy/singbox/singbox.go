@@ -10,6 +10,7 @@ package singbox
 
 import (
 	"context"
+	"strings"
 	"sync"
 	"sync/atomic"
 	"time"
@@ -101,6 +102,10 @@ func (s *starter) Type() interface{} { return (*starter)(nil) }
 // one takes milliseconds (several times that on a phone), and an auto-select group can hold dozens.
 var warmUps = make(chan struct{}, 4)
 
+const warmUpCap = 6
+
+var live atomic.Int32
+
 // beforeBoxStart, when set, runs as an instance begins to start. Tests use it to hold starts back.
 var beforeBoxStart atomic.Pointer[func()]
 
@@ -113,6 +118,9 @@ func (s *starter) Start() error {
 	go func() {
 		warmUps <- struct{}{}
 		defer func() { <-warmUps }()
+		if live.Load() >= warmUpCap {
+			return
+		}
 		if err := s.o.start(); err != nil {
 			errors.LogWarning(context.Background(), "singbox: ", err)
 		}
@@ -151,6 +159,7 @@ func (o *Outbound) start() error {
 		}
 		o.instance = instance
 		o.dialer = dialer
+		live.Add(1)
 	})
 	return o.startErr
 }
@@ -174,9 +183,56 @@ func (o *Outbound) Close() error {
 		err := o.instance.Close()
 		o.instance = nil
 		o.dialer = nil
+		live.Add(-1)
 		return err
 	}
 	return nil
+}
+
+const (
+	readyWait  = 30 * time.Second
+	readyRetry = 150 * time.Millisecond
+)
+
+func notReadyYet(err error) bool {
+	return err != nil && strings.Contains(err.Error(), "not ready yet")
+}
+
+func dialWhenReady(ctx context.Context, dialer N.Dialer, destination net.Destination) (net.Conn, error) {
+	deadline := time.Now().Add(readyWait)
+	for {
+		conn, err := dialer.DialContext(ctx, N.NetworkTCP, singbridge.ToSocksaddr(destination))
+		if !notReadyYet(err) || time.Now().After(deadline) {
+			return conn, err
+		}
+		if waitErr := sleepOrDone(ctx, readyRetry); waitErr != nil {
+			return nil, waitErr
+		}
+	}
+}
+
+func listenWhenReady(ctx context.Context, dialer N.Dialer, destination net.Destination) (net.PacketConn, error) {
+	deadline := time.Now().Add(readyWait)
+	for {
+		packetConn, err := dialer.ListenPacket(ctx, singbridge.ToSocksaddr(destination))
+		if !notReadyYet(err) || time.Now().After(deadline) {
+			return packetConn, err
+		}
+		if waitErr := sleepOrDone(ctx, readyRetry); waitErr != nil {
+			return nil, waitErr
+		}
+	}
+}
+
+func sleepOrDone(ctx context.Context, d time.Duration) error {
+	timer := time.NewTimer(d)
+	defer timer.Stop()
+	select {
+	case <-ctx.Done():
+		return ctx.Err()
+	case <-timer.C:
+		return nil
+	}
 }
 
 // Process implements proxy.Outbound.
@@ -214,7 +270,7 @@ func (o *Outbound) Process(ctx context.Context, link *transport.Link, _ internet
 	errors.LogInfo(ctx, "tunneling request to ", destination, " via sing-box ", o.carrier)
 
 	if destination.Network == net.Network_TCP {
-		conn, err := dialer.DialContext(ctx, N.NetworkTCP, singbridge.ToSocksaddr(destination))
+		conn, err := dialWhenReady(ctx, dialer, destination)
 		if err != nil {
 			// Nothing of the client's data has been read yet, so this is a failure to reach the
 			// destination in Xray's terms — the wording retry logic (auto-select) keys on.
@@ -228,7 +284,7 @@ func (o *Outbound) Process(ctx context.Context, link *transport.Link, _ internet
 		return singbridge.CopyConn(ctx, inboundConn, link, conn)
 	}
 
-	packetConn, err := dialer.ListenPacket(ctx, singbridge.ToSocksaddr(destination))
+	packetConn, err := listenWhenReady(ctx, dialer, destination)
 	if err != nil {
 		return errors.New("failed to find an available destination").Base(err)
 	}

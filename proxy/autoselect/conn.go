@@ -213,6 +213,12 @@ func (g *Group) forward(ctx context.Context, link *transport.Link, ob *session.O
 		return false
 	}
 
+	defer func() {
+		for _, a := range live {
+			c.abort(a)
+		}
+	}()
+
 	primary := launch()
 	_, hedgeDelay := g.timings(primary.m)
 	hedge := time.AfterFunc(hedgeDelay, func() { c.send(event{evHedge, primary}) })
@@ -663,6 +669,9 @@ func (a *attempt) fromHistory() (mb buf.MultiBuffer, err error, ok bool, blocked
 	}
 	if c.srcErr != nil {
 		return nil, c.srcErr, true, false
+	}
+	if c.released {
+		return nil, io.ErrClosedPipe, true, false
 	}
 	return nil, nil, false, false
 }

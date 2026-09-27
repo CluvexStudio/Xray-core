@@ -207,3 +207,4 @@ require (
 // Note this must be repeated in BOTH modules: a replace in a non-main module is ignored, and
 // vendor/AndroidLibXrayLite is the main module for the gomobile build.
 replace github.com/amnezia-vpn/amneziawg-go/v3 => ../../reference/amneziawg-go
+replace github.com/sagernet/sing-openvpn => ../../reference/sing-openvpn

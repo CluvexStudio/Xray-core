@@ -274,10 +274,10 @@ func KernelTunSupported() (bool, error) {
 	hdr.Version = unix.LINUX_CAPABILITY_VERSION_3
 	hdr.Pid = 0 // 0 means current process
 
-	var data unix.CapUserData
-	if err := unix.Capget(&hdr, &data); err != nil {
+	var data [2]unix.CapUserData
+	if err := unix.Capget(&hdr, &data[0]); err != nil {
 		return false, fmt.Errorf("failed to get capabilities: %v", err)
 	}
 
-	return (data.Effective & (1 << unix.CAP_NET_ADMIN)) != 0, nil
+	return (data[0].Effective & (1 << unix.CAP_NET_ADMIN)) != 0, nil
 }

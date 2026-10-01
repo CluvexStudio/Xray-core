@@ -27,6 +27,7 @@ import (
 	"github.com/xtls/xray-core/common/signal"
 	"github.com/xtls/xray-core/common/singbridge"
 	"github.com/xtls/xray-core/core"
+	xdns "github.com/xtls/xray-core/features/dns"
 	"github.com/xtls/xray-core/features/policy"
 	"github.com/xtls/xray-core/features/stats"
 	"github.com/xtls/xray-core/transport"
@@ -75,7 +76,8 @@ func New(ctx context.Context, config *Config) (*Outbound, error) {
 		return nil, errors.New("singbox: viaXray needs an outbound handler to dial through")
 	}
 
-	o.boxCtx = newBoxContext(xrayDialer)
+	resolver := &xrayResolver{}
+	o.boxCtx = newBoxContext(xrayDialer, resolver)
 	options, carrier, err := prepareOptions(o.boxCtx, config)
 	if err != nil {
 		return nil, err
@@ -87,6 +89,9 @@ func New(ctx context.Context, config *Config) (*Outbound, error) {
 	// config is also loaded just to be checked. So the instance starts with Xray, not here.
 	if instance := core.FromContext(ctx); instance != nil {
 		if err := instance.AddFeature(&starter{o: o}); err != nil {
+			return nil, err
+		}
+		if err := instance.RequireFeatures(func(client xdns.Client) { resolver.set(client) }, false); err != nil {
 			return nil, err
 		}
 	}

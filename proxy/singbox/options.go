@@ -27,7 +27,7 @@ const xrayDialerTag = "zed-xray-dialer"
 
 // newBoxContext is sing-box's usual registry context plus the Xray dialer outbound. xrayDialer may
 // be nil when the outbound is not asked to dial through Xray.
-func newBoxContext(xrayDialer internet.Dialer) context.Context {
+func newBoxContext(xrayDialer internet.Dialer, resolver *xrayResolver) context.Context {
 	outboundRegistry := include.OutboundRegistry()
 	sboutbound.Register[option.StubOptions](outboundRegistry, xrayDialerType,
 		func(ctx context.Context, router adapter.Router, logger log.ContextLogger, tag string, _ option.StubOptions) (adapter.Outbound, error) {
@@ -36,11 +36,13 @@ func newBoxContext(xrayDialer internet.Dialer) context.Context {
 			}
 			return newXrayDialerOutbound(tag, xrayDialer), nil
 		})
+	dnsRegistry := include.DNSTransportRegistry()
+	registerResolvers(dnsRegistry, resolver)
 	return box.Context(context.Background(),
 		include.InboundRegistry(),
 		outboundRegistry,
 		include.EndpointRegistry(),
-		include.DNSTransportRegistry(),
+		dnsRegistry,
 		include.ServiceRegistry(),
 		include.CertificateProviderRegistry(),
 	)
@@ -104,6 +106,8 @@ func prepareOptions(ctx context.Context, config *Config) (option.Options, string
 			Options: &option.StubOptions{},
 		})
 	}
+
+	addResolvers(&options)
 
 	if options.Log == nil {
 		options.Log = &option.LogOptions{Level: "warn"}

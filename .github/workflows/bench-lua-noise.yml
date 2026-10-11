@@ -1,0 +1,24 @@
+name: Bench Lua noise
+
+on:
+  push:
+    branches:
+      - finalmask-lua-bench
+  workflow_dispatch:
+
+jobs:
+  bench:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/setup-go@v6
+        with:
+          go-version-file: go.mod
+      - name: Benchmark
+        run: |
+          go test -run '^$' -bench 'BenchmarkLuaNoise' -benchmem -count=3 \
+            ./transport/internet/finalmask/noise/ | tee bench.txt
+      - uses: actions/upload-artifact@v4
+        with:
+          name: bench
+          path: bench.txt

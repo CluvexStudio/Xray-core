@@ -15,6 +15,7 @@ import (
 	googleuuid "github.com/google/uuid"
 	"github.com/xtls/xray-core/common/errors"
 	"github.com/xtls/xray-core/common/net"
+	"github.com/xtls/xray-core/common/platform"
 	"github.com/xtls/xray-core/transport/internet/finalmask/fragment"
 	"github.com/xtls/xray-core/transport/internet/finalmask/header/custom"
 	"github.com/xtls/xray-core/transport/internet/finalmask/mkcp/aes128gcm"
@@ -304,11 +305,31 @@ type NoiseItem struct {
 }
 
 type NoiseMask struct {
-	Reset Int32Range  `json:"reset"`
-	Noise []NoiseItem `json:"noise"`
+	Reset  Int32Range  `json:"reset"`
+	Noise  []NoiseItem `json:"noise"`
+	Script string      `json:"script"`
 }
 
 func (c *NoiseMask) Build() (proto.Message, error) {
+	if c.Script != "" {
+		if len(c.Noise) > 0 {
+			return nil, errors.New(`"script" and "noise" can't be used together`)
+		}
+		path, err := platform.ResolveLuaFile(c.Script)
+		if err != nil {
+			return nil, errors.New("failed to resolve the noise script: ", c.Script).Base(err)
+		}
+		config := &noise.Config{
+			ResetMin: int64(c.Reset.From),
+			ResetMax: int64(c.Reset.To),
+			Script:   path,
+		}
+		if err := config.InitScript(); err != nil {
+			return nil, errors.New("failed to initialize the noise script: ", c.Script).Base(err)
+		}
+		return config, nil
+	}
+
 	noiseSlice := make([]*noise.Item, 0, len(c.Noise))
 	for _, item := range c.Noise {
 		if len(item.Packet) > 0 && item.Rand.To > 0 {

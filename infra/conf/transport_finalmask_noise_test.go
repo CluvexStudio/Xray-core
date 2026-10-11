@@ -2,6 +2,9 @@ package conf
 
 import (
 	"encoding/json"
+	"os"
+	"path/filepath"
+	"strconv"
 	"testing"
 
 	"github.com/xtls/xray-core/transport/internet/finalmask/noise"
@@ -132,5 +135,65 @@ func TestNoiseExpFromJSON(t *testing.T) {
 	}
 	if len(items[3].Segments) != 0 || items[3].RandMin != 10 || items[3].RandMax != 20 {
 		t.Errorf("item 3 = %+v", items[3])
+	}
+}
+
+func TestNoiseScript(t *testing.T) {
+	dir := t.TempDir()
+	path := filepath.Join(dir, "noise.lua")
+	if err := os.WriteFile(path, []byte("function HandleNoise(address) end\n"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+
+	msg, err := (&NoiseMask{Script: path, Reset: Int32Range{From: 30, To: 60}}).Build()
+	if err != nil {
+		t.Fatal(err)
+	}
+	cfg := msg.(*noise.Config)
+	if cfg.Script != path {
+		t.Errorf("got script %q, want %q", cfg.Script, path)
+	}
+	if len(cfg.Items) != 0 {
+		t.Errorf("got %d items, want none", len(cfg.Items))
+	}
+	if cfg.ResetMin != 30 || cfg.ResetMax != 60 {
+		t.Errorf("got reset %d-%d, want 30-60", cfg.ResetMin, cfg.ResetMax)
+	}
+}
+
+func TestNoiseScriptFromJSON(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "noise.lua")
+	if err := os.WriteFile(path, []byte("function HandleNoise(address) end\n"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+
+	var mask NoiseMask
+	if err := json.Unmarshal([]byte(`{"script": `+strconv.Quote(path)+`, "reset": "30-60"}`), &mask); err != nil {
+		t.Fatal(err)
+	}
+	msg, err := mask.Build()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if msg.(*noise.Config).Script != path {
+		t.Errorf("got script %q, want %q", msg.(*noise.Config).Script, path)
+	}
+}
+
+func TestNoiseScriptRejected(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "noise.lua")
+	if err := os.WriteFile(path, []byte("function HandleNoise(address) end\n"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+
+	for name, mask := range map[string]*NoiseMask{
+		"with noise": {Script: path, Noise: []NoiseItem{{Rand: Int32Range{From: 10, To: 20}}}},
+		"missing":    {Script: filepath.Join(t.TempDir(), "absent.lua")},
+	} {
+		t.Run(name, func(t *testing.T) {
+			if _, err := mask.Build(); err == nil {
+				t.Error("expected an error")
+			}
+		})
 	}
 }

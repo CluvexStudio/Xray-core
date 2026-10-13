@@ -1,6 +1,9 @@
 package wireguard
 
-import "strings"
+import (
+	"strconv"
+	"strings"
+)
 
 // awgUAPIKeys maps each AmneziaWG parameter to its UAPI key, in the order the device expects to
 // receive them. These are device-level settings, so every line produced here must be written before
@@ -54,3 +57,15 @@ func (x *AwgConfig) UAPILines() []string {
 
 // HasValue reports whether any AmneziaWG parameter is set.
 func (x *AwgConfig) HasValue() bool { return len(x.UAPILines()) > 0 }
+
+func (x *AwgConfig) CustomHeader() bool {
+	if x == nil {
+		return false
+	}
+	for i, h := range []string{x.H1, x.H2, x.H3, x.H4} {
+		if v := strings.TrimSpace(h); v != "" && v != strconv.Itoa(i+1) {
+			return true
+		}
+	}
+	return strings.TrimSpace(x.HeaderProtectionKey) != ""
+}

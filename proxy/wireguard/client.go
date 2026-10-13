@@ -343,6 +343,7 @@ func (h *Handler) init(ctx context.Context) error {
 	bind.listenFunc = listenFunc
 	bind.downFunc = dev.Down
 	bind.reserved = h.conf.Reserved
+	bind.keepHeader = h.conf.Awg.CustomHeader()
 	var cfg strings.Builder
 	cfg.WriteString("private_key=" + h.conf.SecretKey + "\n")
 	// AmneziaWG obfuscation parameters are device-level, so they must be written before the first

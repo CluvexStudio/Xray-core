@@ -20,6 +20,7 @@ type bind struct {
 	listenFunc  func() (net.PacketConn, error)
 	downFunc    func() error
 	reserved    []byte
+	keepHeader  bool
 
 	net.PacketConn
 	closeCh chan struct{}
@@ -63,7 +64,7 @@ func (b *bind) Open(port uint16) (fns []conn.ReceiveFunc, actualPort uint16, err
 					errors.LogErrorInner(context.Background(), err, "bind recv err")
 					continue
 				}
-				if n > 3 {
+				if n > 3 && !b.keepHeader {
 					bufs[0][1] = 0
 					bufs[0][2] = 0
 					bufs[0][3] = 0
@@ -101,7 +102,7 @@ func (b *bind) Send(bufs [][]byte, ep conn.Endpoint) (err error) {
 	}
 
 	for i := range bufs {
-		if len(bufs[i]) > 3 && len(b.reserved) == 3 {
+		if len(bufs[i]) > 3 && len(b.reserved) == 3 && !b.keepHeader {
 			bufs[i][1] = b.reserved[0]
 			bufs[i][2] = b.reserved[1]
 			bufs[i][3] = b.reserved[2]

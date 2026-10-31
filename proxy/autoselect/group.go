@@ -132,13 +132,13 @@ func (g *Group) Process(ctx context.Context, link *transport.Link, _ internet.Di
 	outbounds := session.OutboundsFromContext(ctx)
 	ob := outbounds[len(outbounds)-1]
 	if !ob.Target.IsValid() {
-		return errors.New("target not specified").AtError()
+		return errors.New("target not specified")
 	}
 	ob.Name = "autoselect"
 	g.noteTraffic()
 	plan := g.plan()
 	if len(plan) == 0 {
-		return errors.New("autoselect: no member outbound is configured").AtWarning()
+		return errors.New("autoselect: no member outbound is configured")
 	}
 	return g.forward(ctx, link, ob, plan)
 }

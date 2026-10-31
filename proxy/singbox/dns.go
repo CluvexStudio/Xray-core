@@ -82,7 +82,7 @@ type lookupTransport struct {
 	lookup func(ctx context.Context, domain string, ipv6 bool) ([]netip.Addr, uint32, error)
 }
 
-func (t *lookupTransport) Start(adapter.StartStage) error { return nil }
+func (t *lookupTransport) Start(adapter.StartStage, *adapter.Scope) error { return nil }
 
 func (t *lookupTransport) Close() error { return nil }
 

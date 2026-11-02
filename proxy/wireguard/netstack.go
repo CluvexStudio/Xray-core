@@ -629,12 +629,11 @@ func (tnet *Net) LookupContextHost(ctx context.Context, host string) ([]string, 
 			}
 		}
 	}
-	// We don't do RFC6724. Instead just put V6 addresses first if an IPv6 address is enabled
 	var addrs []netip.Addr
-	if tnet.hasV6 {
-		addrs = append(addrsV6, addrsV4...)
+	if tnet.hasV4 {
+		addrs = interleaveAddrs(addrsV4, addrsV6)
 	} else {
-		addrs = append(addrsV4, addrsV6...)
+		addrs = interleaveAddrs(addrsV6, addrsV4)
 	}
 
 	if len(addrs) == 0 && lastErr != nil {
@@ -714,6 +713,9 @@ func (tnet *Net) DialContext(ctx context.Context, network, address string) (net.
 	}
 	if len(addrs) == 0 && len(allAddr) != 0 {
 		return nil, &net.OpError{Op: "dial", Err: errNoSuitableAddress}
+	}
+	if matches[1] == "tcp" && len(addrs) > 1 {
+		return tnet.raceTCP(ctx, addrs)
 	}
 
 	var firstErr error

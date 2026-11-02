@@ -23,12 +23,25 @@ func CopyConn(ctx context.Context, inboundConn net.Conn, link *transport.Link, s
 	} else {
 		conn.R = &buf.BufferedReader{Reader: link.Reader}
 	}
+	idle, stop := context.WithCancel(ctx)
+	defer stop()
 	cancel := func() {
+		stop()
 		common.Interrupt(link.Reader)
 		common.Interrupt(serverConn)
 	}
 	conn.T = signal.CancelAfterInactivity(ctx, cancel, 300*time.Second)
-	return ReturnError(bufio.CopyConn(ctx, conn, serverConn))
+	result := make(chan error, 1)
+	go func() {
+		result <- bufio.CopyConn(ctx, conn, serverConn)
+	}()
+	select {
+	case err := <-result:
+		return ReturnError(err)
+	case <-idle.Done():
+		common.Close(serverConn)
+		return nil
+	}
 }
 
 type PipeConnWrapper struct {
@@ -42,6 +55,13 @@ type PipeConnWrapper struct {
 
 func (w *PipeConnWrapper) Close() error {
 	return nil
+}
+
+func (w *PipeConnWrapper) CloseWrite() error {
+	if w.T != nil {
+		w.T.SetTimeout(time.Second)
+	}
+	return common.Close(w.W)
 }
 
 func (w *PipeConnWrapper) Read(b []byte) (n int, err error) {

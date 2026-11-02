@@ -1,6 +1,9 @@
 package wireguard
 
 import (
+	"encoding/base64"
+	"encoding/hex"
+	"regexp"
 	"strconv"
 	"strings"
 )
@@ -49,10 +52,43 @@ func (x *AwgConfig) UAPILines() []string {
 	var lines []string
 	for _, kv := range x.uapiPairs() {
 		if v := strings.TrimSpace(kv[1]); v != "" {
-			lines = append(lines, kv[0]+"="+v)
+			lines = append(lines, kv[0]+"="+awgUAPIValue(kv[0], v))
 		}
 	}
 	return lines
+}
+
+var legacyCounterTag = regexp.MustCompile(`<\s*c\s*>`)
+var legacyWaitTag = regexp.MustCompile(`<\s*wt(\s+[^>]*)?>`)
+
+func awgUAPIValue(key, value string) string {
+	switch key {
+	case "header_protection_key":
+		return keyHex(value)
+	case "random_trailers", "disable_cookies":
+		switch strings.ToLower(value) {
+		case "on", "yes", "y", "enable", "enabled":
+			return "true"
+		case "off", "no", "n", "disable", "disabled":
+			return "false"
+		}
+	case "i1", "i2", "i3", "i4", "i5":
+		value = legacyCounterTag.ReplaceAllString(value, "<r 4>")
+		return legacyWaitTag.ReplaceAllString(value, "")
+	}
+	return value
+}
+
+func keyHex(value string) string {
+	if raw, err := hex.DecodeString(value); err == nil && len(raw) == 32 {
+		return strings.ToLower(value)
+	}
+	for _, encoding := range []*base64.Encoding{base64.StdEncoding, base64.RawStdEncoding, base64.URLEncoding, base64.RawURLEncoding} {
+		if raw, err := encoding.DecodeString(value); err == nil && len(raw) == 32 {
+			return hex.EncodeToString(raw)
+		}
+	}
+	return value
 }
 
 // HasValue reports whether any AmneziaWG parameter is set.

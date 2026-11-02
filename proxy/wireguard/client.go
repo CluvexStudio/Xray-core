@@ -40,6 +40,10 @@ type Handler struct {
 	dev   *device.Device
 	ipc   string
 	mu    sync.Mutex
+
+	routes  allowedRoutes
+	dns     dns.Client
+	sockopt *internet.SocketConfig
 }
 
 func NewClient(ctx context.Context, conf *DeviceConfig) (*Handler, error) {
@@ -205,6 +209,10 @@ func NewClient(ctx context.Context, conf *DeviceConfig) (*Handler, error) {
 		bind:  bind,
 		dev:   dev,
 		ipc:   cfg.String(),
+
+		routes:  splitRoutes(conf.Peers),
+		dns:     d,
+		sockopt: streamSettings.SocketSettings,
 	}, nil
 }
 
@@ -245,11 +253,24 @@ func (h *Handler) Process(ctx context.Context, link *transport.Link, dialer inte
 	var reader buf.Reader
 	var writer buf.Writer
 
+	direct, directTarget := h.outside(ctx, ob.Target)
+	if direct {
+		errors.LogInfo(ctx, "outside the peer's allowed IPs, dialing ", directTarget, " directly")
+	}
+
 	switch ob.Target.Network {
 	case net.Network_TCP:
 		var conn net.Conn
 		var err error
-		if sessionPolicy.Timeouts.Handshake != 0 {
+		if direct {
+			dialCtx := ctx
+			if sessionPolicy.Timeouts.Handshake != 0 {
+				var dialCancel context.CancelFunc
+				dialCtx, dialCancel = context.WithTimeout(ctx, sessionPolicy.Timeouts.Handshake)
+				defer dialCancel()
+			}
+			conn, err = internet.DialSystem(dialCtx, directTarget, h.directSockopt(directTarget))
+		} else if sessionPolicy.Timeouts.Handshake != 0 {
 			timeoutCtx, timeoutCancel := context.WithTimeout(ctx, sessionPolicy.Timeouts.Handshake)
 			conn, err = h.tnet.DialContext(timeoutCtx, "tcp", ob.Target.NetAddr())
 			timeoutCancel()
@@ -263,14 +284,25 @@ func (h *Handler) Process(ctx context.Context, link *transport.Link, dialer inte
 		reader = buf.NewReader(conn)
 		writer = buf.NewWriter(conn)
 	case net.Network_UDP:
-		conn, err := h.tnet.Dial("udp", ob.Target.NetAddr())
+		var conn net.Conn
+		var err error
+		if direct {
+			conn, err = internet.DialSystem(ctx, directTarget, h.directSockopt(directTarget))
+		} else {
+			conn, err = h.tnet.Dial("udp", ob.Target.NetAddr())
+		}
 		if err != nil {
 			return errors.New("failed to create UDP connection").Base(err)
 		}
 		defer conn.Close()
+		wrapper, isPacket := conn.(*net.PacketConnWrapper)
+		dest, isUDP := conn.RemoteAddr().(*net.UDPAddr)
+		if !isPacket || !isUDP {
+			return errors.New("failed to create UDP connection")
+		}
 		c := &UDPConnClient{
-			PacketConn: conn.(*net.PacketConnWrapper).PacketConn,
-			Dest:       conn.RemoteAddr().(*net.UDPAddr),
+			PacketConn: wrapper.PacketConn,
+			Dest:       dest,
 		}
 		reader = c
 		writer = c

@@ -57,6 +57,10 @@ type Outbound struct {
 	dialer    N.Dialer
 	startErr  error
 	closed    bool
+
+	resolver *xrayResolver
+	routes   adapter.OutboundWithPreferredRoutes
+	direct   N.Dialer
 }
 
 // New validates the sing-box fragment and prepares the instance. Nothing dials until Xray starts.
@@ -77,6 +81,7 @@ func New(ctx context.Context, config *Config) (*Outbound, error) {
 	}
 
 	resolver := &xrayResolver{}
+	o.resolver = resolver
 	o.boxCtx = newBoxContext(xrayDialer, resolver)
 	options, carrier, err := prepareOptions(o.boxCtx, config)
 	if err != nil {
@@ -164,6 +169,12 @@ func (o *Outbound) start() error {
 		}
 		o.instance = instance
 		o.dialer = dialer
+		if routes, ok := dialer.(adapter.OutboundWithPreferredRoutes); ok && o.config.ViaXray {
+			if direct, err := findCarrier(instance, xrayDialerTag); err == nil {
+				o.routes = routes
+				o.direct = direct
+			}
+		}
 		live.Add(1)
 	})
 	return o.startErr
@@ -188,6 +199,8 @@ func (o *Outbound) Close() error {
 		err := o.instance.Close()
 		o.instance = nil
 		o.dialer = nil
+		o.routes = nil
+		o.direct = nil
 		live.Add(-1)
 		return err
 	}
@@ -273,6 +286,8 @@ func (o *Outbound) Process(ctx context.Context, link *transport.Link, _ internet
 	}
 
 	errors.LogInfo(ctx, "tunneling request to ", destination, " via sing-box ", o.carrier)
+
+	dialer = o.routeFor(ctx, dialer, destination)
 
 	if destination.Network == net.Network_TCP {
 		conn, err := dialWhenReady(ctx, dialer, destination)

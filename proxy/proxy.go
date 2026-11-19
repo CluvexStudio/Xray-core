@@ -730,6 +730,8 @@ func UnwrapRawConn(conn net.Conn) (net.Conn, stats.Counter, stats.Counter) {
 	return conn, readCounter, writerCounter
 }
 
+const spliceChunkSize = 64 << 10
+
 // CopyRawConnIfExist use the most efficient copy method.
 // - If caller don't want to turn on splice, do not pass in both reader conn and writer conn
 // - writer are from *transport.Link
@@ -775,20 +777,28 @@ func CopyRawConnIfExist(ctx context.Context, readerConn net.Conn, writerConn net
 			if inTimer != nil {
 				inTimer.SetTimeout(24 * time.Hour)
 			}
-			w, err := tc.ReadFrom(readerConn)
-			if readCounter != nil {
-				readCounter.Add(w) // outbound stats
+			chunk := &io.LimitedReader{R: readerConn}
+			for {
+				chunk.N = spliceChunkSize
+				w, err := tc.ReadFrom(chunk)
+				if w > 0 {
+					if readCounter != nil {
+						readCounter.Add(w) // outbound stats
+					}
+					if writeCounter != nil {
+						writeCounter.Add(w) // inbound stats
+					}
+					if statWriter != nil {
+						statWriter.Counter.Add(w) // user stats
+					}
+				}
+				if err != nil && errors.Cause(err) != io.EOF {
+					return err
+				}
+				if err != nil || w < spliceChunkSize {
+					return nil
+				}
 			}
-			if writeCounter != nil {
-				writeCounter.Add(w) // inbound stats
-			}
-			if statWriter != nil {
-				statWriter.Counter.Add(w) // user stats
-			}
-			if err != nil && errors.Cause(err) != io.EOF {
-				return err
-			}
-			return nil
 		}
 		buffer, err := reader.ReadMultiBuffer()
 		if !buffer.IsEmpty() {

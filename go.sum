@@ -231,6 +231,8 @@ github.com/sagernet/cronet-go/all v0.0.0-20260912104727-0d28acc44093 h1:1lRUqrLc
 github.com/sagernet/cronet-go/all v0.0.0-20260912104727-0d28acc44093/go.mod h1:bvm9T9FdwHYYfWdZkLoZ4Qr9Dce0TTQ7ngXlbGZnnJk=
 github.com/sagernet/cronet-go/all v0.0.0-20261118105239-7a29333436ca h1:CjEXUSIWww3Hm/FZdMrlgNRcgiNEv5W+RXqAurPRKOY=
 github.com/sagernet/cronet-go/all v0.0.0-20261118105239-7a29333436ca/go.mod h1:Pm6ZUs9DanGcACgSlLfKSHhQtJxZOFDUGHO1S7pXmOc=
+github.com/sagernet/cronet-go/lib/android_386 v0.0.0-20261118104455-4ecba4761b20 h1:F1Z9OyYB0CalfazIfy52TS9QD/uy6s0+haN3V0D0ibw=
+github.com/sagernet/cronet-go/lib/android_386 v0.0.0-20261118104455-4ecba4761b20/go.mod h1:XXDwdjX/T8xftoeJxQmbBoYXZp8MAPFR2CwbFuTpEtw=
 github.com/sagernet/cronet-go/lib/android_amd64 v0.0.0-20261118104455-4ecba4761b20 h1:pmRrOTf+lO85f/J9IAVTlmG6S0CCgnEhrQpcaADSZvc=
 github.com/sagernet/cronet-go/lib/android_amd64 v0.0.0-20261118104455-4ecba4761b20/go.mod h1:iNiUGoLtnr8/JTuVNj7XJbmpOAp2C6+B81KDrPxwaZM=
 github.com/sagernet/cronet-go/lib/android_arm v0.0.0-20261118104455-4ecba4761b20 h1:mKaklGSTtFRWDP0IcuXNpj++rA/QAKET2FF4AAYnY8s=
@@ -259,6 +261,8 @@ github.com/sagernet/cronet-go/lib/windows_amd64 v0.0.0-20260912104006-c10c03c318
 github.com/sagernet/cronet-go/lib/windows_amd64 v0.0.0-20260912104006-c10c03c318db/go.mod h1:lm9w/oCCRyBiUa3G8lDQTT8x/ONUvgVR2iV9fVzUZB8=
 github.com/sagernet/cronet-go/lib/windows_amd64 v0.0.0-20261118104455-4ecba4761b20 h1:qOMDqn+bVTsWN/nFYfWNFhN1qPizOigKIjH6L9Fuo64=
 github.com/sagernet/cronet-go/lib/windows_amd64 v0.0.0-20261118104455-4ecba4761b20/go.mod h1:lm9w/oCCRyBiUa3G8lDQTT8x/ONUvgVR2iV9fVzUZB8=
+github.com/sagernet/cronet-go/lib/windows_arm64 v0.0.0-20261118104455-4ecba4761b20 h1:OwI69y99OhSx6Z17u3E0JzqZokJxymjpQlCAICe92lQ=
+github.com/sagernet/cronet-go/lib/windows_arm64 v0.0.0-20261118104455-4ecba4761b20/go.mod h1:n34YyLgapgjWdKa0IoeczjAFCwD3/dxbsH5sucKw0bw=
 github.com/sagernet/fswatch v0.1.2 h1:/TT7k4mkce1qFPxamLO842WjqBgbTBiXP2mlUjp9PFk=
 github.com/sagernet/fswatch v0.1.2/go.mod h1:5BpGmpUQVd3Mc5r313HRpvADHRg3/rKn5QbwFteB880=
 github.com/sagernet/gliderssh v0.3.4-0.20261023092853-e0cad6d28647 h1:k4Yg+5FnI1CIYc25zxHJJ1A5JDr/VULxw0Bs5U7fpsY=
